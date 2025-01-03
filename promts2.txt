@@ -2,3 +2,19 @@ can we write a bash script that checks a modified file in a commit and categoriz
 
 
 can we write a bash script that checks a modified file in a commit and categorizes that file "refactor" if last modification of the file is older that 3 weeks
+
+can we write a bash script that checks a modified file in a commit and categorizes that file "help others" if last modification of the file is done by another author and the last modification is not older than 3 weeks.
+
+
+can we combine "refactor" and "help others" in a way that our script;
+
+- first checks a file in a commit for whether it is a "refactor" or not
+- if not than it will check for whether it is "help others" or not
+
+
+can we  extend our combined script in a way that;
+
+- first checks a file in a commit for whether it is a "refactor" or not
+- if not than it will check for whether it is "help others" or not
+- if not than it will check whether it is "new work" or not
+- if not than it will categorize the file as "churn/rework"
