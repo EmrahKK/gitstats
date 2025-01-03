@@ -1,0 +1,4 @@
+can we write a bash script that checks a modified file in a commit and categorizes that file "new work" if the modified lines not replace other lines but rather be written from scratch and independently. Lines added as part of an existing change (git hunk) do not count as new work.
+
+
+can we write a bash script that checks a modified file in a commit and categorizes that file "refactor" if last modification of the file is older that 3 weeks
