@@ -16,23 +16,47 @@ if [ -z "$COMMITS" ]; then
   exit 0
 fi
 
-# Function to determine commit category based on file categories
+# Function to determine commit category based on weighted file categories
 determine_commit_category() {
   local new_work_count=$1
   local refactor_count=$2
   local help_others_count=$3
   local churn_rework_count=$4
 
-  # Priority order: Refactor > Help Others > New Work > Churn/Rework
-  if [ "$refactor_count" -gt 0 ]; then
-    echo "Refactor"
-  elif [ "$help_others_count" -gt 0 ]; then
-    echo "Help Others"
-  elif [ "$new_work_count" -gt 0 ]; then
-    echo "New Work"
-  else
-    echo "Churn/Rework"
-  fi
+  # Apply integer weights to each category
+  new_work_weighted=$((new_work_count * 6))
+  refactor_weighted=$((refactor_count * 8))
+  help_others_weighted=$((help_others_count * 5))
+  churn_rework_weighted=$((churn_rework_count * 4))
+
+  # Create an associative array to store weighted sums
+  declare -A weighted_sums
+  weighted_sums["New Work"]=$new_work_weighted
+  weighted_sums["Refactor"]=$refactor_weighted
+  weighted_sums["Help Others"]=$help_others_weighted
+  weighted_sums["Churn/Rework"]=$churn_rework_weighted
+
+  # Find the category with the highest weighted sum
+  max_category=""
+  max_value=-1
+  for category in "${!weighted_sums[@]}"; do
+    value=${weighted_sums[$category]}
+    if (( value > max_value )); then
+      max_value=$value
+      max_category=$category
+    elif (( value == max_value )); then
+      # If weighted sums are equal, use priority order
+      if [[ "$category" == "Refactor" && ("$max_category" == "New Work" || "$max_category" == "Help Others" || "$max_category" == "Churn/Rework") ]]; then
+        max_category=$category
+      elif [[ "$category" == "New Work" && ("$max_category" == "Help Others" || "$max_category" == "Churn/Rework") ]]; then
+        max_category=$category
+      elif [[ "$category" == "Help Others" && "$max_category" == "Churn/Rework" ]]; then
+        max_category=$category
+      fi
+    fi
+  done
+
+  echo "$max_category"
 }
 
 # Iterate through each commit
@@ -51,6 +75,9 @@ for COMMIT_HASH in $COMMITS; do
 
   # Get the current commit date
   CURRENT_COMMIT_DATE=$(git log -1 --pretty=format:%ct "$COMMIT_HASH")
+
+  # Get the commit message (comments)
+  COMMIT_MESSAGE=$(git log -1 --pretty=format:"%s" "$COMMIT_HASH")
 
   # Get the list of modified files in the commit
   MODIFIED_FILES=$(git diff-tree --no-commit-id --name-only -r "$COMMIT_HASH")
@@ -120,7 +147,7 @@ for COMMIT_HASH in $COMMITS; do
     files_json=$(echo "$files_json" | jq --argjson file "$file_json" '. += [$file]')
   done
 
-  # Determine commit category
+  # Determine commit category based on weighted file categories
   commit_category=$(determine_commit_category "$new_work_count" "$refactor_count" "$help_others_count" "$churn_rework_count")
 
   # Add commit details to JSON
@@ -129,11 +156,12 @@ for COMMIT_HASH in $COMMITS; do
     --arg author "$CURRENT_AUTHOR" \
     --arg email "$CURRENT_AUTHOR_EMAIL" \
     --arg date "$CURRENT_COMMIT_DATE" \
+    --arg message "$COMMIT_MESSAGE" \
     --argjson total_insertions "$total_insertions" \
     --argjson total_deletions "$total_deletions" \
     --arg category "$commit_category" \
     --argjson files "$files_json" \
-    '{hash: $hash, author: $author, email: $email, commit_date: $date, total_insertions: $total_insertions, total_deletions: $total_deletions, category: $category, files: $files}')
+    '{hash: $hash, author: $author, email: $email, commit_date: $date, message: $message, total_insertions: $total_insertions, total_deletions: $total_deletions, category: $category, files: $files}')
 
   output=$(echo "$output" | jq --argjson commit "$commit_json" '.commits += [$commit]')
 done
