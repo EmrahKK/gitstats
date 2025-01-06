@@ -53,3 +53,69 @@ Before using the script, ensure you have the following installed:
 ```./analyze_commits.sh [--since "time-range"] [--until "time-range"]```
 
 ---
+
+## Output
+
+The script outputs a JSON object with the following structure:
+
+```json
+
+{
+  "total_commits_processed": 2,
+  "commits": [
+    {
+      "hash": "abc1234",
+      "author": "John Doe",
+      "email": "john.doe@example.com",
+      "commit_date": 1698765432,
+      "commit_date_hr": "2023-10-30 12:34:56",
+      "message": "Refactor utils.py for better performance",
+      "parent": "def5678",
+      "total_insertions": 15,
+      "total_deletions": 5,
+      "avg_insertions": 7.50,
+      "avg_deletions": 2.50,
+      "category": "Refactor",
+      "files": [
+        {
+          "file": "src/utils.py",
+          "category": "Refactor",
+          "insertions": 10,
+          "deletions": 5
+        },
+        {
+          "file": "src/api.py",
+          "category": "Help Others",
+          "insertions": 5,
+          "deletions": 0
+        }
+      ]
+    },
+    {
+      "hash": "def5678",
+      "author": "Jane Smith",
+      "email": "jane.smith@example.com",
+      "commit_date": 1698765433,
+      "commit_date_hr": "2023-10-30 12:35:00",
+      "message": "Update README with new installation instructions",
+      "parent": "ghi9012",
+      "total_insertions": 20,
+      "total_deletions": 10,
+      "avg_insertions": 20.00,
+      "avg_deletions": 10.00,
+      "category": "New Work",
+      "files": [
+        {
+          "file": "README.md",
+          "category": "New Work",
+          "insertions": 20,
+          "deletions": 10
+        }
+      ]
+    }
+  ]
+}
+
+```
+
+---
