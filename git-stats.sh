@@ -7,12 +7,33 @@ output="{\"total_commits_processed\": 0, \"commits\": []}"
 REFACTOR_THRESHOLD=$((3 * 7 * 24 * 60 * 60))
 HELP_OTHERS_THRESHOLD=$((3 * 7 * 24 * 60 * 60))
 
-# Get the list of commits in the last 24 hours
-COMMITS=$(git log --since="1 week ago" --pretty=format:"%H")
+# Parse command-line arguments for time range
+SINCE="1 week ago"  # Default value
+UNTIL="now"         # Default value
 
-# Check if there are any commits in the last 24 hours
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --since)
+      SINCE="$2"
+      shift 2
+      ;;
+    --until)
+      UNTIL="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown argument: $1"
+      exit 1
+      ;;
+  esac
+done
+
+# Get the list of commits within the specified time range
+COMMITS=$(git log --since="$SINCE" --until="$UNTIL" --pretty=format:"%H")
+
+# Check if there are any commits in the specified time range
 if [ -z "$COMMITS" ]; then
-  echo "No commits found in the last week."
+  echo "No commits found in the specified time range."
   exit 0
 fi
 
@@ -73,14 +94,21 @@ for COMMIT_HASH in $COMMITS; do
   CURRENT_AUTHOR=$(git log -1 --pretty=format:"%an" "$COMMIT_HASH")
   CURRENT_AUTHOR_EMAIL=$(git log -1 --pretty=format:"%ae" "$COMMIT_HASH")
 
-  # Get the current commit date
+  # Get the current commit date (Unix timestamp)
   CURRENT_COMMIT_DATE=$(git log -1 --pretty=format:%ct "$COMMIT_HASH")
+
+  # Convert Unix timestamp to human-readable format
+  COMMIT_DATE_HR=$(date -d "@$CURRENT_COMMIT_DATE" "+%Y-%m-%d %H:%M:%S")
 
   # Get the commit message (comments)
   COMMIT_MESSAGE=$(git log -1 --pretty=format:"%s" "$COMMIT_HASH")
 
+  # Get the parent commit hash
+  PARENT_COMMIT_HASH=$(git log -1 --pretty=format:"%P" "$COMMIT_HASH")
+
   # Get the list of modified files in the commit
   MODIFIED_FILES=$(git diff-tree --no-commit-id --name-only -r "$COMMIT_HASH")
+  TOTAL_FILES_CHANGED=$(echo "$MODIFIED_FILES" | wc -l)
 
   for FILE in $MODIFIED_FILES; do
     # Get the last modification author and date of the file before the current commit
@@ -147,6 +175,15 @@ for COMMIT_HASH in $COMMITS; do
     files_json=$(echo "$files_json" | jq --argjson file "$file_json" '. += [$file]')
   done
 
+  # Calculate average insertions and deletions per file
+  if [ "$TOTAL_FILES_CHANGED" -gt 0 ]; then
+    avg_insertions=$(echo "scale=2; $total_insertions / $TOTAL_FILES_CHANGED" | bc)
+    avg_deletions=$(echo "scale=2; $total_deletions / $TOTAL_FILES_CHANGED" | bc)
+  else
+    avg_insertions=0
+    avg_deletions=0
+  fi
+
   # Determine commit category based on weighted file categories
   commit_category=$(determine_commit_category "$new_work_count" "$refactor_count" "$help_others_count" "$churn_rework_count")
 
@@ -156,12 +193,16 @@ for COMMIT_HASH in $COMMITS; do
     --arg author "$CURRENT_AUTHOR" \
     --arg email "$CURRENT_AUTHOR_EMAIL" \
     --arg date "$CURRENT_COMMIT_DATE" \
+    --arg date_hr "$COMMIT_DATE_HR" \
     --arg message "$COMMIT_MESSAGE" \
+    --arg parent "$PARENT_COMMIT_HASH" \
     --argjson total_insertions "$total_insertions" \
     --argjson total_deletions "$total_deletions" \
+    --argjson avg_insertions "$avg_insertions" \
+    --argjson avg_deletions "$avg_deletions" \
     --arg category "$commit_category" \
     --argjson files "$files_json" \
-    '{hash: $hash, author: $author, email: $email, commit_date: $date, message: $message, total_insertions: $total_insertions, total_deletions: $total_deletions, category: $category, files: $files}')
+    '{hash: $hash, author: $author, email: $email, commit_date: $date, commit_date_hr: $date_hr, message: $message, parent: $parent, total_insertions: $total_insertions, total_deletions: $total_deletions, avg_insertions: $avg_insertions, avg_deletions: $avg_deletions, category: $category, files: $files}')
 
   output=$(echo "$output" | jq --argjson commit "$commit_json" '.commits += [$commit]')
 done
