@@ -52,6 +52,10 @@ Before using the script, ensure you have the following installed:
 
 ```./analyze_commits.sh [--since "time-range"] [--until "time-range"]```
 
+eg.
+
+```./analyze_commits.sh --since "10 days ago"```
+
 ---
 
 ## Output
