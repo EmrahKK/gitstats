@@ -1,0 +1,21 @@
+@startuml
+start
+:Parse Command-Line Arguments;
+:Get Commits Within Time Range;
+while (For Each Commit) is (More Commits?)
+  :Process Commit;
+  :Get Commit Metadata;
+  :Get Modified Files;
+  while (For Each File) is (More Files?)
+    :Categorize File;
+    :Calculate Insertions/Deletions;
+    :Determine File Category;
+    :Add File to Commit;
+  endwhile
+  :Calculate Averages;
+  :Determine Commit Category;
+  :Add Commit to JSON Output;
+endwhile
+:Output JSON;
+stop
+@enduml
