@@ -1,4 +1,4 @@
-# Git Commit Analyzer Script
+# Git Commit Analyzer
 
 This script analyzes Git commits within a specified time range and categorizes them based on the changes made to files. It provides detailed information about each commit, including the author, date, modified files, and the category of the commit (e.g., "New Work", "Refactor", "Help Others", "Churn/Rework").
 
