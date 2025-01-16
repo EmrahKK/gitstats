@@ -8,7 +8,7 @@ REFACTOR_THRESHOLD=$((3 * 7 * 24 * 60 * 60))
 HELP_OTHERS_THRESHOLD=$((3 * 7 * 24 * 60 * 60))
 
 # Parse command-line arguments for time range
-SINCE="1 week ago"  # Default value
+SINCE="7 days ago"  # Default value
 UNTIL="now"         # Default value
 
 while [[ $# -gt 0 ]]; do
@@ -95,6 +95,49 @@ get_modified_files() {
   fi
 }
 
+# Function to determine efficiency for a commit
+determine_commit_efficiency() {
+  local commit_category=$1
+  local commit_insertions=$2
+  local commit_deletions=$3
+  local commit_weight=0
+  local efficiency=0
+
+  # Validate numeric inputs
+  if ! [[ "$commit_insertions" =~ ^[0-9]+$ && "$commit_deletions" =~ ^[0-9]+$ ]]; then
+    echo "Error: Insertions and deletions must be numeric values."
+    return 1
+  fi
+
+  # Set weight based on category
+  case "$commit_category" in
+    "Refactor")
+      commit_weight=0.9
+      ;;
+    "New Work")
+      commit_weight=0.7
+      ;;
+    "Help Others")
+      commit_weight=0.6
+      ;;
+    *)
+      commit_weight=0.5
+      ;;
+  esac
+
+  # Calculate efficiency, avoid division by zero
+  local total_changes=$((commit_insertions + commit_deletions))
+  if [[ $total_changes -eq 0 ]]; then
+    echo "0.00"
+    return 0
+  fi
+
+  efficiency=$(echo "scale=2; ($commit_insertions / $total_changes) * $commit_weight" | bc)
+
+  echo "$efficiency"
+}
+
+
 # Iterate through each commit
 for COMMIT_HASH in $COMMITS; do
   files_json="[]"
@@ -104,6 +147,8 @@ for COMMIT_HASH in $COMMITS; do
   refactor_count=0
   help_others_count=0
   churn_rework_count=0
+  cefficiency=0
+  commits=1
 
   # Get the current author name and email of the commit
   CURRENT_AUTHOR=$(git log -1 --pretty=format:"%an" "$COMMIT_HASH")
@@ -113,7 +158,8 @@ for COMMIT_HASH in $COMMITS; do
   CURRENT_COMMIT_DATE=$(git log -1 --pretty=format:%ct "$COMMIT_HASH")
 
   # Convert Unix timestamp to human-readable format
-  COMMIT_DATE_HR=$(date -d "@$CURRENT_COMMIT_DATE" "+%Y-%m-%d %H:%M:%S")
+  #COMMIT_DATE_HR=$(date -d "@$CURRENT_COMMIT_DATE" "+%Y-%m-%d %H:%M")
+  COMMIT_DATE_HR=$(date -Iseconds -d "@$CURRENT_COMMIT_DATE")
 
   # Get the commit message (comments)
   COMMIT_MESSAGE=$(git log -1 --pretty=format:"%s" "$COMMIT_HASH")
@@ -206,6 +252,9 @@ for COMMIT_HASH in $COMMITS; do
     # Determine commit category based on weighted file categories
     commit_category=$(determine_commit_category "$new_work_count" "$refactor_count" "$help_others_count" "$churn_rework_count")
   fi
+  
+  # Determine commit efficiency based on commit categories, insertions and deletions
+  cefficiency=$(determine_commit_efficiency "$commit_category" "$total_insertions" "$total_deletions")
 
   # Add commit details to JSON
   commit_json=$(jq -n \
@@ -216,15 +265,19 @@ for COMMIT_HASH in $COMMITS; do
     --arg date_hr "$COMMIT_DATE_HR" \
     --arg message "$COMMIT_MESSAGE" \
     --arg parent "$PARENT_COMMIT_HASHES" \
+    --arg branch "$branch" \
+    --argjson commits "$commits" \
     --argjson total_files_changed "$TOTAL_FILES_CHANGED" \
     --argjson total_insertions "$total_insertions" \
     --argjson total_deletions "$total_deletions" \
     --argjson avg_insertions "$avg_insertions" \
     --argjson avg_deletions "$avg_deletions" \
+    --argjson cefficiency "$cefficiency" \
     --arg category "$commit_category" \
     --argjson files "$files_json" \
-    '{hash: $hash, author: $author, email: $email, commit_date: $date, commit_date_hr: $date_hr, message: $message, parent: $parent, total_files_changed: $total_files_changed, total_insertions: $total_insertions, total_deletions: $total_deletions, avg_insertions: $avg_insertions, avg_deletions: $avg_deletions, category: $category, files: $files}')
-
+    '{sha: $hash, author: $author, email: $email, commit_date: $date, date: $date_hr, branch: $branch, message: $message, parent: $parent, commits: $commits, files: $total_files_changed, insertions: $total_insertions, deletions: $total_deletions, avg_insertions: $avg_insertions, avg_deletions: $avg_deletions, category: $category, cefficiency: $cefficiency, files: $files}')
+  echo $commit_json
+  echo ""
   output=$(echo "$output" | jq --argjson commit "$commit_json" '.commits += [$commit]')
 done
 
@@ -233,4 +286,5 @@ total_commits=$(echo "$output" | jq '.commits | length')
 output=$(echo "$output" | jq --argjson total "$total_commits" '.total_commits_processed = $total')
 
 # Output the JSON
-echo "$output" | jq .
+# echo "$output" | jq .
+
