@@ -275,7 +275,7 @@ for COMMIT_HASH in $COMMITS; do
     --argjson cefficiency "$cefficiency" \
     --arg category "$commit_category" \
     --argjson files "$files_json" \
-    '{sha: $hash, author: $author, email: $email, commit_date: $date, date: $date_hr, branch: $branch, message: $message, parent: $parent, commits: $commits, files: $total_files_changed, insertions: $total_insertions, deletions: $total_deletions, avg_insertions: $avg_insertions, avg_deletions: $avg_deletions, category: $category, cefficiency: $cefficiency, files: $files}')
+    '{sha: $hash, author: $author, email: $email, commit_date: $date, date: $date_hr, branch: $branch, message: $message, parent: $parent, commits: $commits, total_files_changed: $total_files_changed, insertions: $total_insertions, deletions: $total_deletions, avg_insertions: $avg_insertions, avg_deletions: $avg_deletions, category: $category, cefficiency: $cefficiency, files: $files}')
   echo $commit_json
   echo ""
   output=$(echo "$output" | jq --argjson commit "$commit_json" '.commits += [$commit]')
