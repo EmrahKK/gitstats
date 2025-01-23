@@ -1,0 +1,147 @@
+"_source": {
+    "sha": "14a6b5affc0555172b092f5fa787337be24f46ed",
+    "author": "jhon",
+    "email": "jhon@gmail.com",
+    "commit_date": "1737578043",
+    "date": "2025-01-22T20:34:03+00:00",
+    "branch": "master",
+    "message": "temporary user time extend",
+    "parent": "9cb283dae8746480a774f17858b4d6004f60c2be",
+    "commits": 1,
+    "project_name": "EBT_PG_YBP_2.0",
+    "repository_name": "SSO",
+    "total_files_changed": 4,
+    "insertions": 3,
+    "deletions": 183,
+    "avg_insertions": 0.75,
+    "avg_deletions": 45.75,
+    "category": "Churn/Rework",
+    "cefficiency": 0,
+    "files": [
+      {
+        "file": "SSOWebApplication/SSOWebApplication.csproj",
+        "category": "Churn/Rework",
+        "insertions": 1,
+        "deletions": 1
+      },
+      {
+        "file": "SSOWebApplication/UserManagement/ServerSideCodes/TempUserExternal.cs",
+        "category": "New Work",
+        "insertions": 1,
+        "deletions": 1
+      },
+      {
+        "file": "SSOWebApplication/UserManagement/ServerSideCodes/UserExternal.cs",
+        "category": "Churn/Rework",
+        "insertions": 0,
+        "deletions": 179
+      },
+      {
+        "file": "SSOWebApplication/UserManagement/TempUserExtension.aspx.cs",
+        "category": "Churn/Rework",
+        "insertions": 1,
+        "deletions": 2
+      }
+    ]
+  }
+    
+"_source": {
+    "sha": "09f7b728ddeb4a402a63f7abe6cf1d086abdd6b8",
+    "author": "Brad Max",
+    "email": "brad.max@hotmail.com",
+    "commit_date": "1737545571",
+    "date": "2025-01-22T11:32:51+00:00",
+    "branch": "master",
+    "message": "fraud yamls completed",
+    "parent": "f3feac6810d95ea88f63feef3ec9174a7fa9fb79",
+    "commits": 1,
+    "project_name": "Amorphie",
+    "repository_name": "yamls",
+    "total_files_changed": 13,
+    "insertions": 0,
+    "deletions": 26,
+    "avg_insertions": 0,
+    "avg_deletions": 2,
+    "category": "New Work",
+    "cefficiency": 0.1,
+    "files": [
+      {
+        "file": "Dapr/amorphie-fraud/apm.yaml",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "Dapr/amorphie-fraud/pubsub-store.yaml",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "Dapr/amorphie-fraud/secret-store.yaml",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "Dapr/amorphie-fraud/state.yaml",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "amorphie-fraud/deploy.yaml",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "amorphie-fraud/fluent-bit.conf",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "amorphie-fraud/fluentbit-kafka-prod.conf",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "amorphie-fraud/fluentbit-kafka.conf",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "amorphie-fraud/hpa.yaml",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "amorphie-fraud/ingress.yaml",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "amorphie-fraud/runtimeconfigmap.yaml",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "amorphie-fraud/sa.yaml",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      },
+      {
+        "file": "amorphie-fraud/service.yaml",
+        "category": "New Work",
+        "insertions": 0,
+        "deletions": 2
+      }
+    ]
+  }
