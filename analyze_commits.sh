@@ -1,15 +1,22 @@
 #!/bin/bash
 
-# Initialize JSON output
-output="{\"total_commits_processed\": 0, \"commits\": []}"
-
 # Define the threshold for "refactor" and "help others" (3 weeks in seconds)
 REFACTOR_THRESHOLD=$((3 * 7 * 24 * 60 * 60))
 HELP_OTHERS_THRESHOLD=$((3 * 7 * 24 * 60 * 60))
 
-# Parse command-line arguments for time range
-SINCE="7 days ago"  # Default value
+# Elasticsearch settings
+ELASTICSEARCH_HOST="https://elastic.com.tr"
+INDEX_NAME="git-stats-combined"
+ELASTICSEARCH_USERNAME=""
+ELASTICSEARCH_PASSWORD=""
+NAMES_INPUT_FILE="users.txt"
+
+# Parse command-line arguments for time range, project name, and repository name
+SINCE="1 week ago"  # Default value
 UNTIL="now"         # Default value
+PROJECT_NAME=""
+REPOSITORY_NAME=""
+REPOSITORY_BRANCH=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -21,12 +28,42 @@ while [[ $# -gt 0 ]]; do
       UNTIL="$2"
       shift 2
       ;;
+    --project_name)
+      PROJECT_NAME="$2"
+      shift 2
+      ;;
+    --repository_name)
+      REPOSITORY_NAME="$2"
+      shift 2
+      ;;
+    --elasticsearch_host)
+      ELASTICSEARCH_HOST="$2"
+      shift 2
+      ;;      
+    --elasticsearch_index)
+      INDEX_NAME="$2"
+      shift 2
+      ;;
+    --elasticsearch_user)
+      ELASTICSEARCH_USERNAME="$2"
+      shift 2
+      ;;
+    --elasticsearch_password)
+      ELASTICSEARCH_PASSWORD="$2"
+      shift 2
+      ;;      
     *)
       echo "Unknown argument: $1"
       exit 1
       ;;
   esac
 done
+
+# Validate project_name and repository_name
+if [[ -z "$PROJECT_NAME" || -z "$REPOSITORY_NAME" ]]; then
+  echo "Error: --project_name and --repository_name are required parameters."
+  exit 1
+fi
 
 # Get the list of commits within the specified time range
 COMMITS=$(git log --since="$SINCE" --until="$UNTIL" --pretty=format:"%H")
@@ -36,6 +73,17 @@ if [ -z "$COMMITS" ]; then
   echo "No commits found in the specified time range."
   exit 0
 fi
+
+# Function to send a commit document to Elasticsearch
+send_to_elasticsearch() {
+  local doc_id=$1
+  local json_data=$2
+  local result=$(curl  -s -w "%{http_code}" -X POST "$ELASTICSEARCH_HOST/$INDEX_NAME/_doc/$doc_id" -H 'Authorization: Basic Zmx1ZW50Ym' -H "Content-Type: application/json" -d "$json_data" -o /dev/null )
+
+  # echo "$PROJECT_NAME $REPOSITORY_NAME $doc_id - $result"
+
+  sleep 0.1
+}
 
 # Function to determine commit category based on weighted file categories
 determine_commit_category() {
@@ -88,7 +136,8 @@ get_modified_files() {
   # If it's a merge commit, compare against all parents
   if [ $(echo "$parent_hashes" | wc -w) -ge 2 ]; then
     # Use `git diff-tree -m` to split the merge commit into individual diffs
-    git diff-tree -m --no-commit-id --name-only -r "$commit_hash"^1 "$commit_hash"
+    # git diff-tree -c --no-commit-id --name-only -r "$commit_hash"^1 "$commit_hash"
+    git diff-tree --no-commit-id --name-only -r "$commit_hash"
   else
     # For non-merge commits, use the standard approach
     git diff-tree --no-commit-id --name-only -r "$commit_hash"
@@ -128,18 +177,41 @@ determine_commit_efficiency() {
   # Calculate efficiency, avoid division by zero
   local total_changes=$((commit_insertions + commit_deletions))
   if [[ $total_changes -eq 0 ]]; then
-    echo "0.00"
+    printf "0.00\n"
     return 0
   fi
 
-  efficiency=$(echo "scale=2; ($commit_insertions / $total_changes) * $commit_weight" | bc)
+  if [[ $commit_insertions -eq 0 ]]; then
+    efficiency=0.1
+  else
+    efficiency=$(echo "scale=2; ($commit_insertions / $total_changes) * $commit_weight" | bc)
+  fi
 
-  echo "$efficiency"
+  printf "%.2f\n" "$efficiency"
 }
 
+# Function to determine impact for a commit
+determine_commit_impact() {
+  local commit_files_changed=$1
+  local commit_insertions=$2
+  local c_impact=0
+
+  c_impact=$((commit_files_changed * commit_insertions))
+
+  echo "$c_impact"
+}
 
 # Iterate through each commit
 for COMMIT_HASH in $COMMITS; do
+  # Get the parent commit hashes
+  PARENT_COMMIT_HASHES=$(git log -1 --pretty=format:"%P" "$COMMIT_HASH")
+
+  # Skip merge commits (those with more than one parent)
+  if [ $(echo "$PARENT_COMMIT_HASHES" | wc -w) -ge 2 ]; then
+    continue
+  fi
+
+
   files_json="[]"
   total_insertions=0
   total_deletions=0
@@ -149,10 +221,25 @@ for COMMIT_HASH in $COMMITS; do
   churn_rework_count=0
   cefficiency=0
   commits=1
+  commit_impact=0
 
   # Get the current author name and email of the commit
   CURRENT_AUTHOR=$(git log -1 --pretty=format:"%an" "$COMMIT_HASH")
   CURRENT_AUTHOR_EMAIL=$(git log -1 --pretty=format:"%ae" "$COMMIT_HASH")
+
+  # Get Author Real Name
+  #echo "--- $CURRENT_AUTHOR"
+  # Lookup the file for the given name or user number
+  if [[ "$CURRENT_AUTHOR" =~ .*0.* ]]; then
+    authorNameDistilled=$(echo "$CURRENT_AUTHOR"| grep -oP "[a-zA-Z][0-9]+")
+    MATCH=$(grep -i "$authorNameDistilled" "users.txt")
+    if [ -n "$MATCH" ]; then
+      # If a match is found, extract and print the user name
+      CURRENT_AUTHOR=$(echo "$MATCH" | awk -F '-' '{print $1}')
+    fi
+  fi
+  
+  #echo "--- $CURRENT_AUTHOR"
 
   # Get the current commit date (Unix timestamp)
   CURRENT_COMMIT_DATE=$(git log -1 --pretty=format:%ct "$COMMIT_HASH")
@@ -164,12 +251,15 @@ for COMMIT_HASH in $COMMITS; do
   # Get the commit message (comments)
   COMMIT_MESSAGE=$(git log -1 --pretty=format:"%s" "$COMMIT_HASH")
 
-  # Get the parent commit hashes
-  PARENT_COMMIT_HASHES=$(git log -1 --pretty=format:"%P" "$COMMIT_HASH")
+  # Get branch name
+  BRANCH=$(git rev-parse --abbrev-ref HEAD)  
 
   # Get the list of modified files in the commit
-  MODIFIED_FILES=$(get_modified_files "$COMMIT_HASH" "$PARENT_COMMIT_HASHES")
+  #MODIFIED_FILES=$(get_modified_files "$COMMIT_HASH" "$PARENT_COMMIT_HASHES")
+  MODIFIED_FILES=$(git show --numstat --format='' "$COMMIT_HASH" | awk '{$2="";$1="";sub("  ","")}1')
   TOTAL_FILES_CHANGED=$(echo "$MODIFIED_FILES" | wc -l)
+
+  IFS=$'\n'
 
   # If there are no modified files, categorize the commit as "Churn/Rework"
   if [ "$TOTAL_FILES_CHANGED" -eq 0 ]; then
@@ -182,6 +272,22 @@ for COMMIT_HASH in $COMMITS; do
         # If the file has no history before this commit, it's "new work"
         CATEGORY="New Work"
         new_work_count=$((new_work_count + 1))
+
+        # Get insertions and deletions for the file
+        STATS=$(git show --numstat --format='' "$COMMIT_HASH" -- "$FILE")
+        INSERTIONS=$(echo "$STATS" | awk '{print $1}')
+        DELETIONS=$(echo "$STATS" | awk '{print $2}')        
+        #echo "$STATS"
+	
+      	# Check if INSERTIONS and DELETIONS are numbers
+        if [[ $INSERTIONS =~ ^[0-9]+$ && $DELETIONS =~ ^[0-9]+$ ]]; then
+          echo "$INSERTIONS - $DELETIONS - $FILE" 	  
+        else
+          echo "Cannot get changed line information for : $FILE "
+          INSERTIONS=0
+          DELETIONS=0
+        fi
+
       else
         # Extract the last modification author and date
         LAST_MODIFIED_AUTHOR=$(echo "$LAST_MODIFIED_INFO" | awk '{$NF=""; print $0}' | sed 's/ *$//')
@@ -191,9 +297,19 @@ for COMMIT_HASH in $COMMITS; do
         TIME_DIFFERENCE=$((CURRENT_COMMIT_DATE - LAST_MODIFIED_DATE))
 
         # Get insertions and deletions for the file
-        STATS=$(git diff --numstat "$COMMIT_HASH^" "$COMMIT_HASH" -- "$FILE")
+        STATS=$(git show --numstat --format='' "$COMMIT_HASH" -- "$FILE")
         INSERTIONS=$(echo "$STATS" | awk '{print $1}')
-        DELETIONS=$(echo "$STATS" | awk '{print $2}')
+        DELETIONS=$(echo "$STATS" | awk '{print $2}')        
+        #echo "$STATS"
+	
+      	# Check if INSERTIONS and DELETIONS are numbers
+        if [[ $INSERTIONS =~ ^[0-9]+$ && $DELETIONS =~ ^[0-9]+$ ]]; then
+          echo "$INSERTIONS - $DELETIONS - $FILE" 	  
+        else
+          echo "Cannot get changed line information for : $FILE "
+          INSERTIONS=0
+          DELETIONS=0
+        fi
 
         # Check if the file qualifies as "refactor"
         if [ "$TIME_DIFFERENCE" -gt "$REFACTOR_THRESHOLD" ]; then
@@ -239,6 +355,7 @@ for COMMIT_HASH in $COMMITS; do
         '{file: $file, category: $category, insertions: $insertions, deletions: $deletions}')
       files_json=$(echo "$files_json" | jq --argjson file "$file_json" '. += [$file]')
     done
+    
 
     # Calculate average insertions and deletions per file
     if [ "$TOTAL_FILES_CHANGED" -gt 0 ]; then
@@ -253,19 +370,29 @@ for COMMIT_HASH in $COMMITS; do
     commit_category=$(determine_commit_category "$new_work_count" "$refactor_count" "$help_others_count" "$churn_rework_count")
   fi
   
+  # Unset IFS for default settings in shell
+  unset IFS
+
   # Determine commit efficiency based on commit categories, insertions and deletions
   cefficiency=$(determine_commit_efficiency "$commit_category" "$total_insertions" "$total_deletions")
+  
+  # Determine commit impact based on commit insertions and changed file count
+  commit_impact=$(determine_commit_impact "$TOTAL_FILES_CHANGED" "$total_insertions")
+
+  #echo "cefficiency : $cefficiency"
 
   # Add commit details to JSON
   commit_json=$(jq -n \
     --arg hash "$COMMIT_HASH" \
     --arg author "$CURRENT_AUTHOR" \
     --arg email "$CURRENT_AUTHOR_EMAIL" \
-    --arg date "$CURRENT_COMMIT_DATE" \
+    --argjson date "$CURRENT_COMMIT_DATE" \
     --arg date_hr "$COMMIT_DATE_HR" \
     --arg message "$COMMIT_MESSAGE" \
     --arg parent "$PARENT_COMMIT_HASHES" \
-    --arg branch "$branch" \
+    --arg project_name "$PROJECT_NAME" \
+    --arg repository_name "$REPOSITORY_NAME" \
+    --arg branch "$BRANCH" \
     --argjson commits "$commits" \
     --argjson total_files_changed "$TOTAL_FILES_CHANGED" \
     --argjson total_insertions "$total_insertions" \
@@ -273,18 +400,14 @@ for COMMIT_HASH in $COMMITS; do
     --argjson avg_insertions "$avg_insertions" \
     --argjson avg_deletions "$avg_deletions" \
     --argjson cefficiency "$cefficiency" \
+    --argjson commit_impact "$commit_impact" \
     --arg category "$commit_category" \
     --argjson files "$files_json" \
-    '{sha: $hash, author: $author, email: $email, commit_date: $date, date: $date_hr, branch: $branch, message: $message, parent: $parent, commits: $commits, total_files_changed: $total_files_changed, insertions: $total_insertions, deletions: $total_deletions, avg_insertions: $avg_insertions, avg_deletions: $avg_deletions, category: $category, cefficiency: $cefficiency, files: $files}')
-  echo $commit_json
-  echo ""
-  output=$(echo "$output" | jq --argjson commit "$commit_json" '.commits += [$commit]')
+    '{sha: $hash, author: $author, email: $email, commit_date: $date, date: $date_hr, branch: $branch, message: $message, parent: $parent, commits: $commits, project_name: $project_name, repository_name: $repository_name, total_files_changed: $total_files_changed, insertions: $total_insertions, deletions: $total_deletions, avg_insertions: $avg_insertions, avg_deletions: $avg_deletions, category: $category, cefficiency: $cefficiency, commit_impact: $commit_impact, files: $files}')
+  
+  #echo " ---"
+  #echo " "
+  #echo "$commit_json"
+  
+  send_to_elasticsearch "$COMMIT_HASH" "$commit_json"
 done
-
-# Add total commits processed to JSON
-total_commits=$(echo "$output" | jq '.commits | length')
-output=$(echo "$output" | jq --argjson total "$total_commits" '.total_commits_processed = $total')
-
-# Output the JSON
-# echo "$output" | jq .
-
